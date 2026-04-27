@@ -20,6 +20,7 @@ class Store {
   private static instance: Store;
   private incidents: Incident[] = [];
   private guestStatuses: Record<string, GuestStatus> = {};
+  private allClear: boolean = false;
 
   private constructor() {}
 
@@ -75,7 +76,16 @@ class Store {
       safe: statuses.filter(s => s.status === "safe").length,
       needHelp: statuses.filter(s => s.status === "need_help").length,
       total: statuses.length,
+      allClear: this.allClear,
     };
+  }
+
+  public setAllClear(value: boolean) {
+    this.allClear = value;
+    if (value) {
+      // Auto-resolve all active incidents when all clear is issued
+      this.incidents = this.incidents.map(i => ({ ...i, status: "resolved" }));
+    }
   }
 }
 

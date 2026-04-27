@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 
 export function useUserStatus() {
-  const [headcounts, setHeadcounts] = useState({ safe: 0, needHelp: 0, total: 0 });
+  const [headcounts, setHeadcounts] = useState({ safe: 0, needHelp: 0, total: 0, allClear: false });
   const [loading, setLoading] = useState(true);
 
   const fetchStats = async () => {
@@ -34,5 +34,18 @@ export function useUserStatus() {
     }
   };
 
-  return { headcounts, loading, checkIn };
+  const broadcastAllClear = async (allClear: boolean) => {
+    try {
+      await fetch("/api/status", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ allClear }),
+      });
+      fetchStats();
+    } catch (error) {
+      console.error("Error broadcasting all clear", error);
+    }
+  };
+
+  return { headcounts, loading, checkIn, broadcastAllClear };
 }

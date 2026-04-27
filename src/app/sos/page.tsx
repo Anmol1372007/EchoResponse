@@ -1,19 +1,40 @@
 "use client";
 
 import { useState } from "react";
-import { ShieldAlert, CheckCircle } from "lucide-react";
+import { ShieldAlert, CheckCircle, Flame, HeartPulse, ShieldCheck, Info } from "lucide-react";
 import { useIncidents } from "@/hooks/useIncidents";
 import { useUserStatus } from "@/hooks/useUserStatus";
+
+const FIRST_AID_INSTRUCTIONS: Record<string, string[]> = {
+  "Fire 🔥": [
+    "Stay low to the ground to avoid smoke.",
+    "Touch doors with the back of your hand before opening.",
+    "If clothes catch fire: Stop, Drop, and Roll.",
+    "Exit via the nearest stairwell; do NOT use elevators."
+  ],
+  "Medical 🚑": [
+    "Check if the person is conscious and breathing.",
+    "If bleeding, apply firm, direct pressure to the wound.",
+    "Do not move the person unless they are in immediate danger.",
+    "Keep the person warm and comfortable until help arrives."
+  ],
+  "Security 🛡️": [
+    "Lock and barricade doors if possible.",
+    "Turn off lights and silence your phone.",
+    "Stay out of sight and away from windows.",
+    "Remain quiet and wait for an 'All Clear' from authorities."
+  ]
+};
 
 export default function SosPage() {
   const [loading, setLoading] = useState(false);
   const [incidentId, setIncidentId] = useState<string | null>(null);
-  const [triageSent, setTriageSent] = useState(false);
+  const [selectedTriage, setSelectedTriage] = useState<string | null>(null);
   const [room, setRoom] = useState<string>("");
   const [markedSafe, setMarkedSafe] = useState(false);
 
   const { triggerSOS, updateIncidentStatus } = useIncidents();
-  const { checkIn } = useUserStatus();
+  const { headcounts, checkIn } = useUserStatus();
 
   const handleSOSClick = async () => {
     const roomNumber = window.prompt("Please enter your room number or location:");
@@ -37,7 +58,6 @@ export default function SosPage() {
       }
     } catch (error) {
       console.error("Error triggering SOS", error);
-      alert("Failed to trigger SOS. Please try again or call emergency services.");
     } finally {
       setLoading(false);
     }
@@ -47,7 +67,7 @@ export default function SosPage() {
     if (!incidentId) return;
     try {
       await updateIncidentStatus(incidentId, "active", type);
-      setTriageSent(true);
+      setSelectedTriage(type);
     } catch (error) {
       console.error("Error updating triage", error);
     }
@@ -71,76 +91,104 @@ export default function SosPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 text-white">
-      <div className="absolute top-4 right-4">
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 text-white relative overflow-hidden">
+      {/* All Clear Broadcast Overlay */}
+      {headcounts.allClear && (
+        <div className="fixed inset-0 z-50 bg-green-600 flex flex-col items-center justify-center text-center p-8 animate-in fade-in duration-500">
+          <ShieldCheck size={120} className="mb-6 animate-bounce" />
+          <h1 className="text-6xl font-black uppercase mb-4 tracking-tighter">All Clear</h1>
+          <p className="text-2xl font-bold max-w-lg">The emergency has been resolved. Authorities have declared the area safe. You may resume normal activities.</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-12 bg-white text-green-600 font-black px-12 py-4 rounded-full text-xl shadow-2xl hover:scale-105 transition-transform"
+          >
+            Acknowledge
+          </button>
+        </div>
+      )}
+
+      {/* Header & Status */}
+      <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-center z-10">
+        <h2 className="text-xl font-black tracking-tighter uppercase opacity-50">EchoResponse</h2>
         {markedSafe ? (
-          <div className="bg-green-600/20 text-green-500 border border-green-500 px-4 py-2 rounded-full flex items-center space-x-2">
+          <div className="bg-green-600 text-white px-6 py-2 rounded-full flex items-center space-x-2 font-bold animate-pulse">
             <CheckCircle size={18} />
-            <span className="font-bold text-sm">Marked Safe</span>
+            <span>SAFE</span>
           </div>
         ) : (
           <button
             onClick={handleMarkSafe}
-            className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold px-4 py-2 rounded-full border border-gray-600 transition-colors"
+            className="bg-gray-800 hover:bg-gray-700 text-white font-bold px-6 py-2 rounded-full border border-gray-700 transition-all active:scale-95"
           >
-            Mark Myself Safe
+            Mark Safe
           </button>
         )}
       </div>
 
-      <div className="text-center mb-12 mt-12">
-        <h1 className="text-4xl font-black mb-2 tracking-tight">Guest Portal</h1>
-        <p className="text-gray-400 text-lg">Tap the button below in case of emergency.</p>
-      </div>
-
       {incidentId ? (
-        <div className="w-full max-w-md bg-gray-900 rounded-3xl p-8 shadow-[0_0_50px_rgba(220,38,38,0.3)] border border-red-900">
-          {!triageSent ? (
-            <div className="text-center">
-              <ShieldAlert className="text-red-500 mx-auto mb-4" size={48} />
-              <h2 className="text-2xl font-bold mb-6">Help is on the way to {room}</h2>
-              <p className="text-gray-400 mb-6">Please specify the type of emergency for faster response:</p>
-              
+        <div className="w-full max-w-md z-10">
+          {!selectedTriage ? (
+            <div className="bg-gray-900 rounded-3xl p-8 border border-red-900/50 shadow-2xl">
+              <ShieldAlert className="text-red-500 mx-auto mb-4 animate-pulse" size={48} />
+              <h2 className="text-2xl font-black text-center mb-6">HELP IS ON THE WAY TO {room}</h2>
               <div className="grid grid-cols-1 gap-4">
-                <button onClick={() => handleTriage("Fire 🔥")} className="bg-orange-600 hover:bg-orange-500 text-white font-bold py-4 rounded-xl text-xl transition-transform active:scale-95">
-                  Fire 🔥
+                <button onClick={() => handleTriage("Fire 🔥")} className="bg-orange-600 hover:bg-orange-500 text-white font-black py-5 rounded-2xl text-xl flex items-center justify-center space-x-3 transition-all active:scale-95">
+                  <Flame size={24} /> <span>FIRE</span>
                 </button>
-                <button onClick={() => handleTriage("Medical 🚑")} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl text-xl transition-transform active:scale-95">
-                  Medical 🚑
+                <button onClick={() => handleTriage("Medical 🚑")} className="bg-blue-600 hover:bg-blue-500 text-white font-black py-5 rounded-2xl text-xl flex items-center justify-center space-x-3 transition-all active:scale-95">
+                  <HeartPulse size={24} /> <span>MEDICAL</span>
                 </button>
-                <button onClick={() => handleTriage("Security 🛡️")} className="bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-4 rounded-xl text-xl transition-transform active:scale-95">
-                  Security 🛡️
+                <button onClick={() => handleTriage("Security 🛡️")} className="bg-yellow-600 hover:bg-yellow-500 text-white font-black py-5 rounded-2xl text-xl flex items-center justify-center space-x-3 transition-all active:scale-95">
+                  <ShieldAlert size={24} /> <span>SECURITY</span>
                 </button>
               </div>
             </div>
           ) : (
-            <div className="text-center py-8">
-              <div className="w-24 h-24 rounded-full bg-green-500/20 text-green-500 mx-auto flex items-center justify-center mb-6">
-                <CheckCircle size={48} />
+            <div className="space-y-6 animate-in slide-in-from-bottom duration-500">
+              <div className="bg-green-600 rounded-3xl p-6 text-center shadow-2xl">
+                <CheckCircle size={48} className="mx-auto mb-2" />
+                <h2 className="text-2xl font-black uppercase">Responders Notified</h2>
+                <p className="font-bold opacity-80">Room {room} • {selectedTriage}</p>
               </div>
-              <h2 className="text-2xl font-bold mb-2">Details Sent</h2>
-              <p className="text-gray-400">First responders have been notified with your exact situation. Please stay safe.</p>
+
+              <div className="bg-gray-900 rounded-3xl p-8 border border-gray-800 shadow-xl">
+                <div className="flex items-center space-x-2 mb-6 text-blue-400">
+                  <Info size={24} />
+                  <h3 className="text-xl font-black uppercase tracking-tight">First-Aid Instructions</h3>
+                </div>
+                <ul className="space-y-4">
+                  {FIRST_AID_INSTRUCTIONS[selectedTriage]?.map((step, i) => (
+                    <li key={i} className="flex items-start space-x-4">
+                      <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0 mt-0.5">
+                        {i + 1}
+                      </span>
+                      <p className="text-gray-300 font-medium leading-tight">{step}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           )}
         </div>
       ) : (
-        <button
-          onClick={handleSOSClick}
-          disabled={loading}
-          className={`w-64 h-64 rounded-full flex flex-col items-center justify-center shadow-[0_0_60px_rgba(220,38,38,0.6)] transition-transform duration-200 active:scale-95 ${
-            loading ? "bg-red-800" : "bg-red-600 hover:bg-red-500 animate-pulse"
-          }`}
-        >
-          <span className="text-5xl font-black uppercase tracking-widest mb-2">SOS</span>
-          <span className="text-sm font-semibold opacity-90 uppercase">
-            {loading ? "Sending..." : "Tap to Request Help"}
-          </span>
-        </button>
+        <div className="flex flex-col items-center">
+          <button
+            onClick={handleSOSClick}
+            disabled={loading}
+            className={`w-72 h-72 rounded-full flex flex-col items-center justify-center shadow-[0_0_80px_rgba(220,38,38,0.5)] transition-all duration-300 active:scale-90 ${
+              loading ? "bg-red-900" : "bg-red-600 hover:bg-red-500 animate-pulse"
+            }`}
+          >
+            <span className="text-7xl font-black uppercase tracking-tighter mb-2">SOS</span>
+            <span className="text-xs font-black opacity-80 uppercase tracking-widest">
+              {loading ? "Sending Signal..." : "Emergency Request"}
+            </span>
+          </button>
+          <p className="mt-12 text-gray-500 font-bold uppercase tracking-widest text-sm text-center max-w-xs">
+            Tap to request immediate assistance to your location
+          </p>
+        </div>
       )}
-
-      <div className="mt-16 text-center text-xs text-gray-600">
-        <p>Your location will be recorded to dispatch responders.</p>
-      </div>
     </div>
   );
 }
