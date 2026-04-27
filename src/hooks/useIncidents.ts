@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
 
+export type Priority = "high" | "medium" | "low";
+
 export interface Incident {
   id: string;
   room: string;
   message: string;
   status: "active" | "resolved";
   triageType?: string;
+  priority: Priority;
   createdAt: string;
 }
 
@@ -26,7 +29,6 @@ export function useIncidents() {
 
   useEffect(() => {
     fetchIncidents();
-    // Poll every 3 seconds for updates (hackathon-ready simple sync)
     const interval = setInterval(fetchIncidents, 3000);
     return () => clearInterval(interval);
   }, []);

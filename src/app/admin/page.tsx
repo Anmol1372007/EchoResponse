@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { AlertTriangle, CheckCircle, Clock, ShieldAlert, ShieldCheck, Megaphone } from "lucide-react";
+import { AlertTriangle, CheckCircle, Clock, ShieldAlert, ShieldCheck, Megaphone, FileDown, Activity, CheckSquare, ListTodo } from "lucide-react";
 import { useIncidents } from "@/hooks/useIncidents";
 import { useUserStatus } from "@/hooks/useUserStatus";
 
@@ -55,12 +55,34 @@ export default function AdminPage() {
     const confirmed = window.confirm("Are you sure? This will notify ALL guests and resolve ALL active incidents.");
     if (confirmed) {
       await broadcastAllClear(true);
-      // Reset broadcast after a delay if needed, or keep it until manually cleared
     }
   };
 
   const handleResetSystem = async () => {
     await broadcastAllClear(false);
+  };
+
+  const downloadReport = () => {
+    const headers = ["ID", "Room", "Triage", "Priority", "Status", "Time"];
+    const rows = incidents.map(i => [
+      i.id,
+      i.room,
+      i.triageType || "None",
+      i.priority.toUpperCase(),
+      i.status.toUpperCase(),
+      new Date(i.createdAt).toLocaleString()
+    ]);
+    
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.setAttribute("hidden", "");
+    a.setAttribute("href", url);
+    a.setAttribute("download", `EchoResponse_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   return (
@@ -70,112 +92,148 @@ export default function AdminPage() {
         <div className="fixed inset-0 border-4 border-red-600/50 pointer-events-none z-50 animate-pulse"></div>
       )}
 
-      <header className="mb-8 border-b border-gray-800 pb-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-center space-x-4">
-            <div className={`p-3 rounded-xl ${hasActiveAlerts ? "bg-red-900/50 text-red-500 animate-pulse" : "bg-gray-800 text-gray-400"}`}>
-              <ShieldAlert size={32} />
-            </div>
-            <div>
-              <h1 className="text-3xl font-black tracking-widest uppercase text-white">War Room Command</h1>
-              <p className="text-gray-400 font-medium tracking-tighter uppercase text-xs">EchoResponse Tactical Dashboard</p>
-            </div>
+      {/* Analytics Header */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="bg-gray-900/50 border border-gray-800 p-6 rounded-3xl flex items-center justify-between shadow-lg">
+          <div>
+            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Total Incidents</p>
+            <p className="text-3xl font-black text-white">{incidents.length}</p>
           </div>
-
-          <div className="flex items-center space-x-6">
-            {/* Live Statistics Card */}
-            <div className="flex space-x-4 bg-gray-900 border border-gray-800 p-4 rounded-2xl shadow-xl">
-              <div className="flex flex-col items-center px-6 border-r border-gray-800">
-                <span className="text-3xl font-black text-red-500">{activeIncidents.length}</span>
-                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1">Active Alerts</span>
-              </div>
-              <div className="flex flex-col items-center px-6">
-                <span className="text-3xl font-black text-green-500">{headcounts.safe}</span>
-                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1">Safe Guests</span>
-              </div>
-            </div>
-
-            {/* Broadcast Controls */}
-            {headcounts.allClear ? (
-              <button
-                onClick={handleResetSystem}
-                className="bg-green-600 hover:bg-green-500 text-white font-black px-8 py-4 rounded-2xl flex items-center space-x-3 shadow-2xl transition-all active:scale-95"
-              >
-                <ShieldCheck size={24} />
-                <span className="uppercase tracking-widest">System Clear</span>
-              </button>
-            ) : (
-              <button
-                onClick={handleAllClear}
-                className={`px-8 py-4 rounded-2xl flex items-center space-x-3 font-black transition-all active:scale-95 shadow-xl ${
-                  hasActiveAlerts 
-                    ? "bg-red-600 hover:bg-red-500 text-white animate-pulse" 
-                    : "bg-gray-800 text-gray-500 opacity-50 cursor-not-allowed"
-                }`}
-                disabled={!hasActiveAlerts}
-              >
-                <Megaphone size={24} />
-                <span className="uppercase tracking-widest text-sm">Broadcast All Clear</span>
-              </button>
-            )}
+          <Activity className="text-blue-500 opacity-50" size={32} />
+        </div>
+        <div className="bg-gray-900/50 border border-gray-800 p-6 rounded-3xl flex items-center justify-between shadow-lg">
+          <div>
+            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Resolved</p>
+            <p className="text-3xl font-black text-green-500">{incidents.filter(i => i.status === "resolved").length}</p>
           </div>
+          <CheckSquare className="text-green-500 opacity-50" size={32} />
+        </div>
+        <div className="bg-gray-900/50 border border-gray-800 p-6 rounded-3xl flex items-center justify-between shadow-lg">
+          <div>
+            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Pending</p>
+            <p className="text-3xl font-black text-red-500">{activeIncidents.length}</p>
+          </div>
+          <ListTodo className="text-red-500 opacity-50" size={32} />
+        </div>
+        <div className="bg-gray-900/50 border border-gray-800 p-6 rounded-3xl flex items-center justify-between shadow-lg">
+          <div>
+            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Safe Guests</p>
+            <p className="text-3xl font-black text-emerald-400">{headcounts.safe}</p>
+          </div>
+          <ShieldCheck className="text-emerald-400 opacity-50" size={32} />
+        </div>
+      </div>
+
+      <header className="mb-12 border-b border-gray-800 pb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
+        <div className="flex items-center space-x-5">
+          <div className={`p-4 rounded-2xl ${hasActiveAlerts ? "bg-red-900/40 text-red-500 animate-pulse" : "bg-gray-800 text-gray-400"}`}>
+            <ShieldAlert size={36} />
+          </div>
+          <div>
+            <h1 className="text-4xl font-black tracking-tighter uppercase text-white">War Room Command</h1>
+            <p className="text-gray-500 font-bold tracking-widest uppercase text-[10px]">Strategic Incident Response System</p>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-4 w-full md:w-auto">
+          <button 
+            onClick={downloadReport}
+            className="flex-1 md:flex-none bg-gray-800 hover:bg-gray-700 text-gray-300 font-black px-6 py-4 rounded-2xl flex items-center justify-center space-x-3 transition-all active:scale-95 border border-gray-700"
+          >
+            <FileDown size={20} />
+            <span className="uppercase tracking-widest text-xs">Export Logs</span>
+          </button>
+
+          {headcounts.allClear ? (
+            <button
+              onClick={handleResetSystem}
+              className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-500 text-white font-black px-10 py-4 rounded-2xl flex items-center justify-center space-x-3 shadow-2xl transition-all active:scale-95"
+            >
+              <ShieldCheck size={20} />
+              <span className="uppercase tracking-widest text-xs">Reset System</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleAllClear}
+              disabled={!hasActiveAlerts}
+              className={`flex-1 md:flex-none px-10 py-4 rounded-2xl flex items-center justify-center space-x-3 font-black transition-all active:scale-95 shadow-xl ${
+                hasActiveAlerts 
+                  ? "bg-red-600 hover:bg-red-500 text-white animate-pulse" 
+                  : "bg-gray-800 text-gray-500 opacity-50 cursor-not-allowed"
+              }`}
+            >
+              <Megaphone size={20} />
+              <span className="uppercase tracking-widest text-xs">Broadcast All Clear</span>
+            </button>
+          )}
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center space-x-3">
-            <div className="w-2 h-2 rounded-full bg-red-500 animate-ping"></div>
-            <h2 className="text-xl font-bold tracking-widest uppercase text-gray-300">Live Incident Feed</h2>
-          </div>
-          <p className="text-xs font-black text-gray-600 uppercase tracking-widest">Real-time status updates</p>
+      <main className="max-w-6xl mx-auto pb-20">
+        <div className="flex items-center space-x-3 mb-10">
+          <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping"></div>
+          <h2 className="text-2xl font-black tracking-tighter uppercase text-gray-200">Active Incidents Feed</h2>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-6">
           {activeIncidents.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-20 bg-gray-900/30 rounded-3xl border border-gray-800 border-dashed text-gray-600">
-              <ShieldCheck size={64} className="mb-4 opacity-20 text-green-700" />
-              <p className="font-black text-xl tracking-widest uppercase opacity-40 italic">All Clear • Systems Nominal</p>
+            <div className="flex flex-col items-center justify-center p-24 bg-gray-900/20 rounded-[40px] border border-gray-800 border-dashed text-gray-600">
+              <ShieldCheck size={80} className="mb-6 opacity-10 text-green-700" />
+              <p className="font-black text-2xl tracking-tighter uppercase opacity-30">No Active Threats Detected</p>
             </div>
           ) : (
-            activeIncidents.map((incident) => (
-              <div 
-                key={incident.id} 
-                className="bg-gray-900 p-8 rounded-3xl border border-red-900/30 flex flex-col md:flex-row md:justify-between md:items-center transition-all shadow-[0_0_50px_rgba(220,38,38,0.05)] hover:shadow-[0_0_60px_rgba(220,38,38,0.15)] gap-6"
-              >
-                <div className="flex items-start space-x-6">
-                  <div className="mt-2 p-3 bg-red-950/50 rounded-xl">
-                    <AlertTriangle className="text-red-500" size={28} />
-                  </div>
-                  <div>
-                    <h2 className="text-3xl font-black text-white flex items-center space-x-4">
-                      <span className="tracking-tighter">ROOM {incident.room}</span>
-                      {incident.triageType && (
-                        <span className="bg-red-600 text-white text-[10px] font-black px-4 py-1.5 rounded-full tracking-widest uppercase shadow-lg">
-                          {incident.triageType}
+            activeIncidents.map((incident) => {
+              const isHigh = incident.priority === "high";
+              return (
+                <div 
+                  key={incident.id} 
+                  className={`bg-gray-900 p-8 rounded-[32px] border transition-all flex flex-col lg:flex-row lg:justify-between lg:items-center gap-8 ${
+                    isHigh 
+                      ? "border-red-600/50 shadow-[0_0_50px_rgba(220,38,38,0.15)] animate-pulse" 
+                      : "border-gray-800"
+                  }`}
+                >
+                  <div className="flex items-start space-x-6">
+                    <div className={`mt-2 p-4 rounded-2xl ${isHigh ? "bg-red-600 text-white shadow-lg" : "bg-gray-800 text-gray-400"}`}>
+                      <AlertTriangle size={32} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-4 mb-2">
+                        <h2 className="text-4xl font-black text-white tracking-tighter">ROOM {incident.room}</h2>
+                        {incident.triageType && (
+                          <span className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase ${
+                            isHigh ? "bg-red-600 text-white" : "bg-yellow-600 text-white"
+                          }`}>
+                            {incident.triageType}
+                          </span>
+                        )}
+                        <span className={`text-[10px] font-black px-3 py-1 rounded-md border tracking-widest uppercase ${
+                          isHigh ? "border-red-600 text-red-500" : "border-gray-700 text-gray-500"
+                        }`}>
+                          {incident.priority} PRIORITY
                         </span>
-                      )}
-                    </h2>
-                    <p className="text-gray-400 mt-2 text-lg font-medium opacity-80">{incident.message}</p>
-                    <div className="flex items-center space-x-4 mt-4">
-                      <p className="text-[10px] font-black text-gray-600 flex items-center uppercase tracking-widest">
-                        <Clock size={12} className="mr-2" />
-                        {new Date(incident.createdAt).toLocaleTimeString()}
-                      </p>
-                      <span className="w-1 h-1 rounded-full bg-gray-800"></span>
-                      <p className="text-[10px] font-black text-red-700 uppercase tracking-widest">Priority Alpha</p>
+                      </div>
+                      <p className="text-gray-400 text-xl font-medium mb-4 opacity-90">{incident.message}</p>
+                      <div className="flex items-center space-x-4">
+                        <p className="text-[10px] font-black text-gray-600 flex items-center uppercase tracking-widest">
+                          <Clock size={12} className="mr-2" />
+                          {new Date(incident.createdAt).toLocaleTimeString()}
+                        </p>
+                        <span className="w-1 h-1 rounded-full bg-gray-800"></span>
+                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">EST. RESPONSE: 3M</p>
+                      </div>
                     </div>
                   </div>
+                  
+                  <button
+                    onClick={() => handleResolve(incident.id)}
+                    className="bg-white text-black hover:bg-gray-200 font-black tracking-widest uppercase py-6 px-12 rounded-2xl transition-all active:scale-95 shadow-2xl whitespace-nowrap text-sm self-stretch lg:self-center"
+                  >
+                    RESOLVE NOW
+                  </button>
                 </div>
-                
-                <button
-                  onClick={() => handleResolve(incident.id)}
-                  className="bg-white text-black hover:bg-gray-200 font-black tracking-widest uppercase py-5 px-10 rounded-2xl transition-all active:scale-95 shadow-xl whitespace-nowrap text-sm"
-                >
-                  Resolve Incident
-                </button>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </main>
