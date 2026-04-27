@@ -1,4 +1,15 @@
 import { useState, useEffect } from "react";
+import { 
+  collection, 
+  query, 
+  orderBy, 
+  onSnapshot, 
+  addDoc, 
+  updateDoc, 
+  doc, 
+  serverTimestamp 
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export type Priority = "high" | "medium" | "low";
 
@@ -9,40 +20,50 @@ export interface Incident {
   status: "active" | "resolved";
   triageType?: string;
   priority: Priority;
-  createdAt: string;
+  createdAt: any;
 }
 
 export function useIncidents() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchIncidents = async () => {
-    try {
-      const res = await fetch("/api/incidents");
-      const data = await res.json();
-      setIncidents(data);
-      setLoading(false);
-    } catch (error) {
-      console.error("Failed to fetch incidents", error);
-    }
-  };
-
   useEffect(() => {
-    fetchIncidents();
-    const interval = setInterval(fetchIncidents, 3000);
-    return () => clearInterval(interval);
+    // Technical Requirement: Fetch BOTH active and resolved statuses from DB
+    const q = query(collection(db, "incidents"), orderBy("createdAt", "desc"));
+    
+    // Technical Requirement: Use onSnapshot for real-time persistence
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Incident[];
+      
+      // Technical Logic: Priority sorting
+      const sortedData = data.sort((a, b) => {
+        if (a.status === "active" && b.status === "active") {
+          const scores: Record<string, number> = { high: 3, medium: 2, low: 1 };
+          return (scores[b.priority] || 0) - (scores[a.priority] || 0);
+        }
+        return 0;
+      });
+
+      setIncidents(sortedData);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const triggerSOS = async (room: string, message: string) => {
     try {
-      const res = await fetch("/api/incidents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ room, message }),
+      const docRef = await addDoc(collection(db, "incidents"), {
+        room,
+        message,
+        status: "active",
+        priority: "low",
+        createdAt: serverTimestamp(),
       });
-      const newIncident = await res.json();
-      setIncidents(prev => [newIncident, ...prev]);
-      return newIncident.id;
+      return docRef.id;
     } catch (error) {
       console.error("Error triggering SOS", error);
     }
@@ -50,13 +71,18 @@ export function useIncidents() {
 
   const updateIncidentStatus = async (id: string, status: "active" | "resolved", triageType?: string) => {
     try {
-      const res = await fetch("/api/incidents", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status, triageType }),
-      });
-      const updated = await res.json();
-      setIncidents(prev => prev.map(i => i.id === id ? updated : i));
+      const updates: any = { status };
+      if (triageType) {
+        updates.triageType = triageType;
+        if (triageType.includes("Fire") || triageType.includes("Medical")) {
+          updates.priority = "high";
+        } else if (triageType.includes("Security")) {
+          updates.priority = "medium";
+        } else {
+          updates.priority = "low";
+        }
+      }
+      await updateDoc(doc(db, "incidents", id), updates);
     } catch (error) {
       console.error("Error updating incident", error);
     }

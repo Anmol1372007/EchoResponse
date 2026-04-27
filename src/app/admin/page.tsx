@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useEffect, useRef, useMemo } from "react";
 import { 
   AlertTriangle, 
@@ -16,6 +18,15 @@ import {
 } from "lucide-react";
 import { useIncidents, Incident } from "@/hooks/useIncidents";
 import { useUserStatus } from "@/hooks/useUserStatus";
+
+// Utility to handle both JS Dates and Firestore Timestamps
+const formatTimestamp = (ts: any) => {
+  if (!ts) return "Just now";
+  // If it's a Firestore Timestamp
+  if (ts.toDate) return ts.toDate().toLocaleTimeString();
+  // If it's an ISO string or Date object
+  return new Date(ts).toLocaleTimeString();
+};
 
 const playAlertSound = () => {
   try {
@@ -45,8 +56,8 @@ export default function AdminPage() {
   const previousIncidentsCount = useRef(0);
   const isFirstLoad = useRef(true);
 
-  // LOGIC: Separate Active and History without deleting from database
-  // Stable useMemo prevents unnecessary re-renders of the entire list
+  // Technical Requirement: No deletions. Filter status from the complete set.
+  // Stable keys (incident.id) are used in the .map calls below to prevent flickering.
   const activeIncidents = useMemo(() => incidents.filter((i) => i.status === "active"), [incidents]);
   const resolvedIncidents = useMemo(() => incidents.filter((i) => i.status === "resolved"), [incidents]);
   
@@ -54,17 +65,14 @@ export default function AdminPage() {
 
   useEffect(() => {
     const activeCount = activeIncidents.length;
-
     if (!isFirstLoad.current && activeCount > previousIncidentsCount.current) {
       playAlertSound();
     }
-
     previousIncidentsCount.current = activeCount;
     isFirstLoad.current = false;
   }, [activeIncidents.length]);
 
   const handleResolve = async (id: string) => {
-    // Technical Logic: update status to 'resolved' instead of deleting
     await updateIncidentStatus(id, "resolved");
   };
 
@@ -87,7 +95,7 @@ export default function AdminPage() {
       i.triageType || "None",
       i.priority.toUpperCase(),
       i.status.toUpperCase(),
-      new Date(i.createdAt).toLocaleString()
+      i.createdAt?.toDate ? i.createdAt.toDate().toLocaleString() : new Date(i.createdAt).toLocaleString()
     ]);
     
     const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
@@ -153,32 +161,17 @@ export default function AdminPage() {
         </div>
 
         <div className="flex items-center space-x-4 w-full md:w-auto">
-          <button 
-            onClick={downloadReport}
-            className="flex-1 md:flex-none bg-gray-800 hover:bg-gray-700 text-gray-300 font-black px-6 py-4 rounded-2xl flex items-center justify-center space-x-3 transition-all active:scale-95 border border-gray-700"
-          >
+          <button onClick={downloadReport} className="flex-1 md:flex-none bg-gray-800 hover:bg-gray-700 text-gray-300 font-black px-6 py-4 rounded-2xl flex items-center justify-center space-x-3 transition-all active:scale-95 border border-gray-700">
             <FileDown size={20} />
             <span className="uppercase tracking-widest text-xs">Export Logs</span>
           </button>
-
           {headcounts.allClear ? (
-            <button
-              onClick={handleResetSystem}
-              className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-500 text-white font-black px-10 py-4 rounded-2xl flex items-center justify-center space-x-3 shadow-2xl transition-all active:scale-95"
-            >
+            <button onClick={handleResetSystem} className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-500 text-white font-black px-10 py-4 rounded-2xl flex items-center justify-center space-x-3 shadow-2xl transition-all active:scale-95">
               <ShieldCheck size={20} />
               <span className="uppercase tracking-widest text-xs">Reset System</span>
             </button>
           ) : (
-            <button
-              onClick={handleAllClear}
-              disabled={!hasActiveAlerts}
-              className={`flex-1 md:flex-none px-10 py-4 rounded-2xl flex items-center justify-center space-x-3 font-black transition-all active:scale-95 shadow-xl ${
-                hasActiveAlerts 
-                  ? "bg-red-600 hover:bg-red-500 text-white animate-pulse" 
-                  : "bg-gray-800 text-gray-500 opacity-50 cursor-not-allowed"
-              }`}
-            >
+            <button onClick={handleAllClear} disabled={!hasActiveAlerts} className={`flex-1 md:flex-none px-10 py-4 rounded-2xl flex items-center justify-center space-x-3 font-black transition-all active:scale-95 shadow-xl ${hasActiveAlerts ? "bg-red-600 hover:bg-red-500 text-white animate-pulse" : "bg-gray-800 text-gray-500 opacity-50 cursor-not-allowed"}`}>
               <Megaphone size={20} />
               <span className="uppercase tracking-widest text-xs">Broadcast All Clear</span>
             </button>
@@ -187,13 +180,11 @@ export default function AdminPage() {
       </header>
 
       <main className="max-w-6xl mx-auto pb-20 space-y-16">
-        {/* SECTION 1: ACTIVE INCIDENTS FEED */}
         <section>
           <div className="flex items-center space-x-3 mb-10">
             <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping"></div>
             <h2 className="text-2xl font-black tracking-tighter uppercase text-gray-200">Active Alerts</h2>
           </div>
-
           <div className="space-y-6">
             {activeIncidents.length === 0 ? (
               <div className="flex flex-col items-center justify-center p-24 bg-gray-900/20 rounded-[40px] border border-gray-800 border-dashed text-gray-600">
@@ -201,69 +192,41 @@ export default function AdminPage() {
                 <p className="font-black text-2xl tracking-tighter uppercase opacity-30">No Active Threats Detected</p>
               </div>
             ) : (
-              activeIncidents.map((incident) => {
-                const isHigh = incident.priority === "high";
-                return (
-                  <div 
-                    key={incident.id} 
-                    className={`bg-gray-900 p-8 rounded-[32px] border transition-all flex flex-col lg:flex-row lg:justify-between lg:items-center gap-8 ${
-                      isHigh 
-                        ? "border-red-600/50 shadow-[0_0_50px_rgba(220,38,38,0.15)] animate-pulse" 
-                        : "border-gray-800"
-                    }`}
-                  >
-                    <div className="flex items-start space-x-6">
-                      <div className={`mt-2 p-4 rounded-2xl ${isHigh ? "bg-red-600 text-white shadow-lg" : "bg-gray-800 text-gray-400"}`}>
-                        <AlertTriangle size={32} />
+              activeIncidents.map((incident) => (
+                <div key={incident.id} className={`bg-gray-900 p-8 rounded-[32px] border transition-all flex flex-col lg:flex-row lg:justify-between lg:items-center gap-8 ${incident.priority === "high" ? "border-red-600/50 shadow-[0_0_50px_rgba(220,38,38,0.15)] animate-pulse" : "border-gray-800"}`}>
+                  <div className="flex items-start space-x-6">
+                    <div className={`mt-2 p-4 rounded-2xl ${incident.priority === "high" ? "bg-red-600 text-white shadow-lg" : "bg-gray-800 text-gray-400"}`}>
+                      <AlertTriangle size={32} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-4 mb-2">
+                        <h2 className="text-4xl font-black text-white tracking-tighter">ROOM {incident.room}</h2>
+                        {incident.triageType && <span className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase ${incident.priority === "high" ? "bg-red-600 text-white" : "bg-yellow-600 text-white"}`}>{incident.triageType}</span>}
+                        <span className={`text-[10px] font-black px-3 py-1 rounded-md border tracking-widest uppercase ${incident.priority === "high" ? "border-red-600 text-red-500" : "border-gray-700 text-gray-500"}`}>{incident.priority} PRIORITY</span>
                       </div>
-                      <div>
-                        <div className="flex items-center gap-4 mb-2">
-                          <h2 className="text-4xl font-black text-white tracking-tighter">ROOM {incident.room}</h2>
-                          {incident.triageType && (
-                            <span className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase ${
-                              isHigh ? "bg-red-600 text-white" : "bg-yellow-600 text-white"
-                            }`}>
-                              {incident.triageType}
-                            </span>
-                          )}
-                          <span className={`text-[10px] font-black px-3 py-1 rounded-md border tracking-widest uppercase ${
-                            isHigh ? "border-red-600 text-red-500" : "border-gray-700 text-gray-500"
-                          }`}>
-                            {incident.priority} PRIORITY
-                          </span>
-                        </div>
-                        <p className="text-gray-400 text-xl font-medium mb-4 opacity-90">{incident.message}</p>
-                        <div className="flex items-center space-x-4">
-                          <p className="text-[10px] font-black text-gray-600 flex items-center uppercase tracking-widest">
-                            <Clock size={12} className="mr-2" />
-                            {new Date(incident.createdAt).toLocaleTimeString()}
-                          </p>
-                          <span className="w-1 h-1 rounded-full bg-gray-800"></span>
-                          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">EST. RESPONSE: 3M</p>
-                        </div>
+                      <p className="text-gray-400 text-xl font-medium mb-4 opacity-90">{incident.message}</p>
+                      <div className="flex items-center space-x-4">
+                        <p className="text-[10px] font-black text-gray-600 flex items-center uppercase tracking-widest">
+                          <Clock size={12} className="mr-2" />
+                          {formatTimestamp(incident.createdAt)}
+                        </p>
+                        <span className="w-1 h-1 rounded-full bg-gray-800"></span>
+                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">EST. RESPONSE: 3M</p>
                       </div>
                     </div>
-                    
-                    <button
-                      onClick={() => handleResolve(incident.id)}
-                      className="bg-white text-black hover:bg-gray-200 font-black tracking-widest uppercase py-6 px-12 rounded-2xl transition-all active:scale-95 shadow-2xl whitespace-nowrap text-sm self-stretch lg:self-center"
-                    >
-                      RESOLVE NOW
-                    </button>
                   </div>
-                );
-              })
+                  <button onClick={() => handleResolve(incident.id)} className="bg-white text-black hover:bg-gray-200 font-black tracking-widest uppercase py-6 px-12 rounded-2xl transition-all active:scale-95 shadow-2xl whitespace-nowrap text-sm self-stretch lg:self-center">RESOLVE NOW</button>
+                </div>
+              ))
             )}
           </div>
         </section>
 
-        {/* SECTION 2: INCIDENT HISTORY (RESOLVED) */}
         <section className="opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500">
           <div className="flex items-center space-x-3 mb-10">
             <History className="text-gray-500" size={30} />
             <h2 className="text-2xl font-black tracking-tighter uppercase text-gray-400">Tactical History Log</h2>
           </div>
-
           <div className="bg-gray-900/30 rounded-[40px] border border-gray-800 overflow-hidden shadow-2xl">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -277,28 +240,15 @@ export default function AdminPage() {
                 </thead>
                 <tbody>
                   {resolvedIncidents.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="p-12 text-center text-gray-700 font-bold uppercase tracking-widest text-xs italic">
-                        Log archive is empty
-                      </td>
-                    </tr>
+                    <tr><td colSpan={4} className="p-12 text-center text-gray-700 font-bold uppercase tracking-widest text-xs italic">Log archive is empty</td></tr>
                   ) : (
                     resolvedIncidents.map((incident) => (
                       <tr key={incident.id} className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-all">
-                        <td className="p-8">
-                          <span className="text-xl font-black text-gray-300 tracking-tighter">ROOM {incident.room}</span>
-                        </td>
-                        <td className="p-8">
-                          <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">{incident.triageType || "General Alert"}</span>
-                        </td>
-                        <td className="p-8">
-                          <div className="flex items-center space-x-2 text-green-500">
-                            <CheckCircle size={14} />
-                            <span className="text-[10px] font-black uppercase tracking-widest">Successfully Resolved</span>
-                          </div>
-                        </td>
+                        <td className="p-8"><span className="text-xl font-black text-gray-300 tracking-tighter">ROOM {incident.room}</span></td>
+                        <td className="p-8"><span className="text-xs font-bold text-gray-500 uppercase tracking-widest">{incident.triageType || "General Alert"}</span></td>
+                        <td className="p-8"><div className="flex items-center space-x-2 text-green-500"><CheckCircle size={14} /><span className="text-[10px] font-black uppercase tracking-widest">Successfully Resolved</span></div></td>
                         <td className="p-8 text-[10px] text-gray-600 font-mono">
-                          {new Date(incident.createdAt).toLocaleString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
+                          {incident.createdAt?.toDate ? incident.createdAt.toDate().toLocaleString() : new Date(incident.createdAt).toLocaleString()}
                         </td>
                       </tr>
                     ))

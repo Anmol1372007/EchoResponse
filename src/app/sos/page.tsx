@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useState } from "react";
 import { ShieldAlert, CheckCircle, Flame, HeartPulse, ShieldCheck, Info, Globe } from "lucide-react";
 import { useIncidents } from "@/hooks/useIncidents";
@@ -241,7 +243,7 @@ export default function SosPage() {
 
               <div className="bg-gray-900 rounded-3xl p-8 border border-gray-800 shadow-xl">
                 <div className="flex items-center space-x-2 mb-6 text-blue-400">
-                  <Info size={24} />
+                  <span className="text-blue-400"><Info size={24} /></span>
                   <h3 className="text-xl font-black uppercase tracking-tight">{t.first_aid_title}</h3>
                 </div>
                 <ul className="space-y-4">
